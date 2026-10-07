@@ -5,6 +5,7 @@ import Image from "next/image";
 import {
   CheckCircle,
   ImageSquare,
+  Lightning,
   Sparkle,
   UploadSimple,
   WarningCircle,
@@ -21,6 +22,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { performFastClothTryOn } from "@/lib/onnxTryOn";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(
   /\/+$/,
@@ -227,6 +229,7 @@ export default function Home() {
   const [personPreviewUrl, setPersonPreviewUrl] = useState<string | null>(null);
   const [garmentPreviewUrl, setGarmentPreviewUrl] = useState<string | null>(null);
   const [category, setCategory] = useState<Category>("tops");
+  const [engineMode, setEngineMode] = useState<"onnx" | "ai">("onnx");
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -240,7 +243,7 @@ export default function Home() {
 
   useEffect(() => {
     return () => {
-      if (resultUrl) {
+      if (resultUrl && resultUrl.startsWith("blob:")) {
         URL.revokeObjectURL(resultUrl);
       }
     };
@@ -288,27 +291,36 @@ export default function Home() {
     setIsGenerating(true);
     setError(null);
 
-    const formData = new FormData();
-    formData.append("person_image", personImage);
-    formData.append("garment_image", garmentImage);
-    formData.append("category", category);
-
     try {
-      const response = await fetch(`${API_BASE_URL}/try-on`, {
-        method: "POST",
-        body: formData,
-      });
+      if (engineMode === "onnx") {
+        // Fast In-Browser ONNX / Canvas Engine (< 1s)
+        const resultDataUrl = await performFastClothTryOn(personImage, garmentImage, {
+          category,
+        });
+        setResultUrl(resultDataUrl);
+      } else {
+        // Full AI Diffusion Server (FastAPI / CUDA)
+        const formData = new FormData();
+        formData.append("person_image", personImage);
+        formData.append("garment_image", garmentImage);
+        formData.append("category", category);
 
-      if (!response.ok) {
-        throw new Error(await responseErrorMessage(response));
+        const response = await fetch(`${API_BASE_URL}/try-on`, {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error(await responseErrorMessage(response));
+        }
+
+        const blob = await response.blob();
+        if (!blob.type.startsWith("image/")) {
+          throw new Error("Backend returned a non-image response.");
+        }
+
+        setResultUrl(URL.createObjectURL(blob));
       }
-
-      const blob = await response.blob();
-      if (!blob.type.startsWith("image/")) {
-        throw new Error("Backend returned a non-image response.");
-      }
-
-      setResultUrl(URL.createObjectURL(blob));
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Try-on request failed.");
     } finally {
@@ -356,7 +368,22 @@ export default function Home() {
         </section>
 
         <Card>
-          <CardContent className="grid gap-4 pt-5 md:grid-cols-[minmax(220px,320px)_1fr_auto] md:items-end">
+          <CardContent className="grid gap-4 pt-5 md:grid-cols-[minmax(180px,220px)_minmax(220px,280px)_1fr_auto] md:items-end">
+            <div className="space-y-2">
+              <Label htmlFor="engine-mode">Mode / Engine</Label>
+              <Select
+                id="engine-mode"
+                value={engineMode}
+                onChange={(event) => {
+                  setEngineMode(event.target.value as "onnx" | "ai");
+                  resetResult();
+                }}
+              >
+                <option value="onnx">⚡ Fast ONNX Mode (&lt; 1s)</option>
+                <option value="ai">✨ AI Diffusion (CUDA Server)</option>
+              </Select>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="category">Category</Label>
               <Select
@@ -376,8 +403,15 @@ export default function Home() {
             </div>
 
             <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
-              Selected garment category:{" "}
-              <span className="font-medium text-zinc-950">{selectedCategory}</span>
+              {engineMode === "onnx" ? (
+                <span>
+                  ⚡ <strong className="text-teal-700">Instant Mode ({selectedCategory}):</strong> Runs in browser.
+                </span>
+              ) : (
+                <span>
+                  ✨ <strong className="text-zinc-900">AI Deep Mode ({selectedCategory}):</strong> Local CUDA backend.
+                </span>
+              )}
             </div>
 
             <Button
@@ -387,8 +421,12 @@ export default function Home() {
               onClick={handleGenerate}
               className="w-full md:w-auto"
             >
-              <Sparkle className="h-4 w-4" weight="fill" />
-              {isGenerating ? "Generating" : "Generate"}
+              {engineMode === "onnx" ? (
+                <Lightning className="h-4 w-4" weight="fill" />
+              ) : (
+                <Sparkle className="h-4 w-4" weight="fill" />
+              )}
+              {isGenerating ? "Generating..." : engineMode === "onnx" ? "Instant Try-On" : "AI Try-On"}
             </Button>
           </CardContent>
         </Card>
