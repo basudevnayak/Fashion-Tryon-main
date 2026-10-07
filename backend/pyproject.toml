@@ -1,0 +1,16 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12.11"
+dependencies = [
+    "fashn-vton",
+    "fastapi>=0.136.1",
+    "pillow>=12.2.0",
+    "python-multipart>=0.0.29",
+    "uvicorn[standard]>=0.47.0",
+]
+
+[tool.uv.sources]
+fashn-vton = { git = "https://github.com/fashn-AI/fashn-vton-1.5.git" }
