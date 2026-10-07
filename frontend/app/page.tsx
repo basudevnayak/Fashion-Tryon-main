@@ -3,6 +3,7 @@
 import { type DragEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import {
+  Camera,
   CheckCircle,
   ImageSquare,
   Lightning,
@@ -23,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { performFastClothTryOn } from "@/lib/onnxTryOn";
+import { CameraCaptureModal } from "@/components/CameraCaptureModal";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(
   /\/+$/,
@@ -86,6 +88,7 @@ function UploadPanel({
 }: UploadPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
 
   function openFilePicker() {
     inputRef.current?.click();
@@ -128,98 +131,118 @@ function UploadPanel({
   }
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle>{title}</CardTitle>
-            <CardDescription>{description}</CardDescription>
-          </div>
-          {file ? (
-            <CheckCircle className="h-5 w-5 shrink-0 text-teal-700" weight="fill" />
-          ) : (
-            <ImageSquare className="h-5 w-5 shrink-0 text-zinc-500" />
-          )}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div
-          role="button"
-          tabIndex={0}
-          aria-label={`Upload ${title.toLowerCase()}`}
-          onClick={openFilePicker}
-          onKeyDown={handleDropZoneKeyDown}
-          onDragEnter={handleDragOver}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          className={cn(
-            "relative aspect-[4/5] cursor-pointer overflow-hidden rounded-md border border-dashed bg-zinc-50 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2",
-            isDragging
-              ? "border-teal-700 bg-teal-50"
-              : "border-zinc-300 hover:border-zinc-400 hover:bg-zinc-100",
-          )}
-        >
-          {previewUrl ? (
-            <Image
-              src={previewUrl}
-              alt={`${title} preview`}
-              fill
-              unoptimized
-              sizes="(max-width: 768px) 100vw, 40vw"
-              className="object-cover"
-            />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-3 text-zinc-500">
-              <ImageSquare className="h-10 w-10" />
-              <span className="text-sm font-medium">
-                {isDragging ? "Drop image here" : "Drag image here"}
-              </span>
-              <span className="text-xs text-zinc-400">or select from your device</span>
+    <>
+      <Card className="overflow-hidden">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle>{title}</CardTitle>
+              <CardDescription>{description}</CardDescription>
             </div>
-          )}
-          {previewUrl && isDragging ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-teal-900/70 text-sm font-medium text-white">
-              Drop to replace image
-            </div>
-          ) : null}
-        </div>
-
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-h-10 text-sm text-zinc-600">
             {file ? (
-              <>
-                <div className="max-w-[220px] truncate font-medium text-zinc-950">{file.name}</div>
-                <div>{formatFileSize(file)}</div>
-              </>
+              <CheckCircle className="h-5 w-5 shrink-0 text-teal-700" weight="fill" />
             ) : (
-              <div className="pt-2">PNG, JPG, WEBP</div>
+              <ImageSquare className="h-5 w-5 shrink-0 text-zinc-500" />
             )}
           </div>
-
-          <input
-            ref={inputRef}
-            id={id}
-            type="file"
-            accept="image/*"
-            className="sr-only"
-            onChange={(event) => {
-              acceptFile(event.target.files?.[0] ?? null);
-              event.currentTarget.value = "";
-            }}
-          />
-          <Button
-            type="button"
-            variant="outline"
+        </CardHeader>
+        <CardContent>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label={`Upload ${title.toLowerCase()}`}
             onClick={openFilePicker}
-            className="w-full sm:w-auto"
+            onKeyDown={handleDropZoneKeyDown}
+            onDragEnter={handleDragOver}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={cn(
+              "relative aspect-[4/5] cursor-pointer overflow-hidden rounded-md border border-dashed bg-zinc-50 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2",
+              isDragging
+                ? "border-teal-700 bg-teal-50"
+                : "border-zinc-300 hover:border-zinc-400 hover:bg-zinc-100",
+            )}
           >
-            <UploadSimple className="h-4 w-4" />
-            Select image
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+            {previewUrl ? (
+              <Image
+                src={previewUrl}
+                alt={`${title} preview`}
+                fill
+                unoptimized
+                sizes="(max-width: 768px) 100vw, 40vw"
+                className="object-cover"
+              />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-3 text-zinc-500">
+                <ImageSquare className="h-10 w-10" />
+                <span className="text-sm font-medium">
+                  {isDragging ? "Drop image here" : "Drag image here"}
+                </span>
+                <span className="text-xs text-zinc-400">or use camera / choose from gallery</span>
+              </div>
+            )}
+            {previewUrl && isDragging ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-teal-900/70 text-sm font-medium text-white">
+                Drop to replace image
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-h-10 text-sm text-zinc-600">
+              {file ? (
+                <>
+                  <div className="max-w-[180px] truncate font-medium text-zinc-950">{file.name}</div>
+                  <div>{formatFileSize(file)}</div>
+                </>
+              ) : (
+                <div className="pt-2">PNG, JPG, WEBP</div>
+              )}
+            </div>
+
+            <input
+              ref={inputRef}
+              id={id}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={(event) => {
+                acceptFile(event.target.files?.[0] ?? null);
+                event.currentTarget.value = "";
+              }}
+            />
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCameraOpen(true)}
+                className="flex-1 sm:flex-initial"
+              >
+                <Camera className="h-4 w-4 text-teal-700" weight="fill" />
+                Camera
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={openFilePicker}
+                className="flex-1 sm:flex-initial"
+              >
+                <UploadSimple className="h-4 w-4" />
+                Gallery
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <CameraCaptureModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={(capturedFile) => acceptFile(capturedFile)}
+      />
+    </>
   );
 }
 
